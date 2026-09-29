@@ -90,7 +90,7 @@ useEffect(() => {
   >
     ⚙️ إدارة المتجر
   </Link>
-)}</nav>
+)})}</nav>
     </header>
   );
 }
