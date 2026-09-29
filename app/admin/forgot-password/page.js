@@ -5,7 +5,7 @@ import { supabaseBrowser } from '../../../lib/supabaseClient';
 
 // يجب أن يكون رابط الموقع المنشور الحقيقي، وليس localhost. يُضبط في
 // Vercel → Environment Variables → NEXT_PUBLIC_SITE_URL.
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || '').replace(/\/$/, '');
+const SITE_URL = typeof window !== 'undefined' ? window.location.origin : '';
 const SITE_URL_INVALID = !SITE_URL || /localhost|127\.0\.0\.1/.test(SITE_URL);
 
 export default function ForgotPassword() {
