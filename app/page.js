@@ -11,7 +11,17 @@ export default async function Home() {
     supabase.from('products').select('*, categories(name)').eq('published', true).order('created_at', { ascending: false }).limit(8),
     supabase.from('categories').select('*').order('sort'),
     supabase.from('products').select('*, categories(name)').eq('published', true).eq('featured', true).limit(4),
-  ]);
+  ]);const { data: { user } } = await supabase.auth.getUser();
+
+let isAdmin = false;
+
+if (user) {
+  const { data: admin } = await supabase
+    .from('admins')
+    .select('user_id')
+    .eq('user_id', user.id)
+    .maybeSingle();
+isAdmin = !!admin;
 
   return (
     <div className="py-6">
@@ -21,7 +31,11 @@ export default async function Home() {
       <div className="flex gap-3 flex-wrap mt-4">
         <Link href="/shop" className="btn btn-yellow">تصفّح المتجر</Link>
         <Link href="/shop" className="btn btn-ghost">التصنيفات</Link>
-      </div>
+    {isAdmin && (
+  <Link href="/admin" className="btn btn-ghost">
+    ⚙️ إدارة المتجر
+  </Link>
+)}  </div>
 
       <section className="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-3 text-center font-bold">
         <div className="bg-brand-soft rounded-2xl p-4">📥<br />تحميل سهل</div>
