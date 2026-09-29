@@ -72,10 +72,25 @@ useEffect(() => {
       {open && (
         <nav className="md:hidden px-4 pb-3 border-b-4 border-brand-pink font-bold flex flex-col">
           {NAV.map(([href, label]) => (
-            <Link key={label} href={href} className="py-2 border-b border-brand-line" onClick={() => setOpen(false)}>{label}</Link>
-          ))}
-        </nav>
-      )}
+  <Link
+    key={label}
+    href={href}
+    className="py-2 border-b border-brand-line"
+    onClick={() => setOpen(false)}
+  >
+    {label}
+  </Link>
+))}
+
+{isAdmin && (
+  <Link
+    href="/admin"
+    className="py-2 border-b border-brand-line"
+    onClick={() => setOpen(false)}
+  >
+    ⚙️ إدارة المتجر
+  </Link>
+)}</nav>
     </header>
   );
 }
