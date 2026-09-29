@@ -4,7 +4,7 @@ on:
   push:
     paths:
       - 'crayon-planet-nextjs(3).zip'
-
+  workflow_dispatch:
 permissions:
   contents: write
 
