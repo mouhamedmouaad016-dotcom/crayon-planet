@@ -22,7 +22,7 @@ if (user) {
     .eq('user_id', user.id)
     .maybeSingle();
 isAdmin = !!admin;
-
+}
   return (
     <div className="py-6">
       <section className="rounded-2xl overflow-hidden border-2 border-brand-line">
