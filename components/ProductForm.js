@@ -13,6 +13,19 @@ function slugify(s) {
     .slice(0, 60) + '-' + Date.now().toString(36).slice(-4);
 }
 
+// يبني مفتاح تخزين آمنًا وفريدًا دون أي اعتماد على اسم الملف الأصلي، الذي قد
+// يحتوي أحرفًا مرفوضة من Supabase Storage (مثل ':') — خصوصًا من بعض متصفحات
+// أندرويد التي تُرجع أحيانًا اسمًا مشتقًا من معرّف الملف الداخلي (مثل
+// "document:1000012345") بدل الاسم الحقيقي. الامتداد فقط يُستخرج من الاسم
+// الأصلي، وما تبقى منه يُستبعد كليًا من المفتاح.
+function safeStorageKey(originalName) {
+  const dot = originalName.lastIndexOf('.');
+  const rawExt = dot > -1 ? originalName.slice(dot + 1) : '';
+  const ext = rawExt.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 10);
+  const random = Math.random().toString(36).slice(2, 8);
+  return `${Date.now()}-${random}${ext ? '.' + ext : ''}`;
+}
+
 export default function ProductForm({ product }) {
   const router = useRouter();
   const [cats, setCats] = useState([]);
@@ -44,7 +57,7 @@ export default function ProductForm({ product }) {
     const supabase = supabaseBrowser();
     const urls = [];
     for (const file of fileList) {
-      const path = `${Date.now()}-${file.name}`.replace(/\s+/g, '_');
+      const path = safeStorageKey(file.name);
       const { error: upErr } = await supabase.storage.from('product-images').upload(path, file, { upsert: false });
       if (upErr) { setError('تعذّر رفع إحدى الصور: ' + upErr.message); continue; }
       const { data } = supabase.storage.from('product-images').getPublicUrl(path);
@@ -55,7 +68,7 @@ export default function ProductForm({ product }) {
 
   async function uploadFile(file) {
     const supabase = supabaseBrowser();
-    const path = `${Date.now()}-${file.name}`.replace(/\s+/g, '_');
+    const path = safeStorageKey(file.name);
     const { error: upErr } = await supabase.storage.from('product-files').upload(path, file, { upsert: false });
     if (upErr) { setError('تعذّر رفع الملف: ' + upErr.message); return; }
     setFilePath(path);
@@ -174,3 +187,4 @@ export default function ProductForm({ product }) {
     </form>
   );
 }
+  
