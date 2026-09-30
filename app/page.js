@@ -23,6 +23,12 @@ if (user) {
     .maybeSingle();
 isAdmin = !!admin;
 }
+
+// نستبعد من "أحدث المنتجات" أي منتج ظهر أصلًا في "المنتجات المميزة"، حتى لا
+// يتكرر نفس المنتج في قسمين معًا (يظهر بوضوح عند وجود منتج واحد أو قليل).
+const featuredIds = new Set((featured || []).map((f) => f.id));
+const latestOnly = (products || []).filter((p) => !featuredIds.has(p.id));
+
   return (
     <div className="py-6">
       <section className="rounded-2xl overflow-hidden border-2 border-brand-line">
@@ -62,16 +68,20 @@ isAdmin = !!admin;
         </div>
       </section>
 
-      <section className="mt-10 mb-10">
-        <h2 className="mb-3">أحدث المنتجات</h2>
-        {products?.length ? (
+      {latestOnly.length > 0 && (
+        <section className="mt-10 mb-10">
+          <h2 className="mb-3">أحدث المنتجات</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-            {products.map((p) => <ProductCard key={p.id} p={p} />)}
+            {latestOnly.map((p) => <ProductCard key={p.id} p={p} />)}
           </div>
-        ) : (
+        </section>
+      )}
+      {!products?.length && (
+        <section className="mt-10 mb-10">
           <Empty title="لا توجد منتجات بعد" sub="نجهّز منتجاتنا الآن. ستظهر هنا فور نشرها من لوحة الإدارة." />
-        )}
-      </section>
+        </section>
+      )}
     </div>
   );
-}
+    }
+        
