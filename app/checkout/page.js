@@ -52,7 +52,15 @@ export default function Checkout() {
     const orderBody = await orderRes.json().catch(() => ({}));
     if (!orderRes.ok) {
       setBusy(false);
-      setError(orderBody.error || 'تعذّر تسجيل الطلب، حاول مجددًا.');
+      let msg = orderBody.error || 'تعذّر تسجيل الطلب، حاول مجددًا.';
+      // تشخيص مؤقت: نعرض تفاصيل debug الآمنة القادمة من /api/orders عند
+      // وجودها (رسالة/كود/تفاصيل/تلميح من Supabase)، لمساعدتنا على تحديد
+      // سبب الخطأ الحقيقي من الشاشة مباشرة دون الحاجة لسجلات Vercel.
+      if (orderBody.debug) {
+        const d = orderBody.debug;
+        msg += ` [debug] message: ${d.message || '-'} | code: ${d.code || '-'} | details: ${d.details || '-'} | hint: ${d.hint || '-'}`;
+      }
+      setError(msg);
       return;
     }
     const orderId = orderBody.orderId;
@@ -109,4 +117,4 @@ export default function Checkout() {
       </form>
     </div>
   );
-}
+                                                                }
