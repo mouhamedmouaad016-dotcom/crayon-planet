@@ -20,7 +20,17 @@ export async function POST(req) {
     .select('id, name, price, published')
     .in('id', productIds);
 
-  if (error) return NextResponse.json({ error: 'تعذّر التحقق من المنتجات' }, { status: 500 });
+  if (error) {
+    // تشخيص مؤقت وآمن: يطبع السبب الحقيقي من Supabase في سجلات Vercel
+    // (Runtime Logs) فقط، ولا يكشف أي مفتاح أو قيمة سرّية للمستخدم أبدًا.
+    console.error('Supabase products lookup failed:', {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
+    return NextResponse.json({ error: 'تعذّر التحقق من المنتجات' }, { status: 500 });
+  }
 
   const found = new Map((products || []).map((p) => [p.id, p]));
   const items = [];
