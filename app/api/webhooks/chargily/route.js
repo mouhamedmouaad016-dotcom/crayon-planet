@@ -230,7 +230,7 @@ if (paidError) {
     { status: 500 }
   );
 }
-    }
+    
 
     /*
      * Create signed download URLs for ALL ordered products, send the email,
