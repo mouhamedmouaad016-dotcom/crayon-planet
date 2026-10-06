@@ -98,7 +98,7 @@ return NextResponse.json(
   { status: 500 }
 );
   }
-);
+
   const checkout = event?.data;
 
   /*
