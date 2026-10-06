@@ -6,7 +6,7 @@ import Empty from '../../../components/Empty';
 
 const LABELS = {
   Pending: ['جارٍ التحقق من الدفع…', 'لا تغلق الصفحة. نتحقق من نتيجة الدفع مباشرة من Chargily.'],
-  Paid: ['تم الدفع بنجاح 🎉', 'يصلك رابط تحميل المنتج على بريدك خلال لحظات.'],
+  Paid: ['تم الدفع بنجاح 🎉', 'يصلك رابط تحميل المنتج على بريدك خلال لحظات. إن لم يصلك، افحص الرسائل غير الهامة ثم استعد الرابط من صفحة «استعادة الرابط».'],
   Delivered: ['تم الدفع والتسليم 🎉', 'أرسلنا رابط تحميل المنتج إلى بريدك.'],
   Failed: ['فشلت عملية الدفع', 'لم يُخصم أي مبلغ ولم يُرسل أي ملف. يمكنك المحاولة مجددًا من السلة.'],
   Cancelled: ['تم إلغاء عملية الدفع', 'لم يُخصم أي مبلغ ولم يُرسل أي ملف.'],
@@ -49,6 +49,9 @@ export default function DoneInner() {
       <p className="text-center text-sm text-gray-500 mt-3">رقم الطلب: {id}</p>
       <div className="text-center mt-4">
         <Link href="/shop" className="btn btn-primary">العودة للمتجر</Link>
+        {(status === 'Paid' || status === 'Delivered') && (
+          <p className="mt-3 text-sm"><Link href="/recover" className="underline">لم يصلك الرابط؟ استعد رابط التحميل</Link></p>
+        )}
       </div>
     </div>
   );

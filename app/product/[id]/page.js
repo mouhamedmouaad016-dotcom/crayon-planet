@@ -4,6 +4,7 @@ import { supabaseServer } from '../../../lib/supabaseServer';
 import { fmt } from '../../../components/ProductCard';
 import ProductCard from '../../../components/ProductCard';
 import BuyButtons from './BuyButtons';
+import { cleanText } from '../../../lib/text';
 import ReviewForm from './ReviewForm';
 import AdminProductActions from './AdminProductActions';
 
@@ -37,7 +38,7 @@ async function checkIsAdmin(supabase) {
 export async function generateMetadata({ params }) {
   const p = await getProduct(params.id);
   if (!p) return { title: 'منتج غير موجود | CRAYON PLANET' };
-  const desc = (p.description || '').slice(0, 155);
+  const desc = cleanText(p.description).replace(/\s+/g, ' ').slice(0, 155);
   return {
     title: `${p.name} | CRAYON PLANET`,
     description: desc,
@@ -102,7 +103,7 @@ export default async function ProductPage({ params }) {
             {fmt(p.price)}
             {p.compare_at_price > p.price && <s className="text-gray-400 text-base font-normal ms-2">{fmt(p.compare_at_price)}</s>}
           </div>
-          <p className="whitespace-pre-line my-3">{p.description}</p>
+          <p className="whitespace-pre-line my-3">{cleanText(p.description)}</p>
           <table className="w-full text-sm mb-4">
             <tbody>
               <tr className="border-b border-brand-line">

@@ -20,9 +20,6 @@ export default function Policy({ params }) {
     <div className="py-6">
       <h2 className="mb-3">{p[0]}</h2>
       <p>{p[1]}</p>
-      <div className="bg-yellow-50 text-yellow-900 rounded-xl p-3 text-sm mt-4">
-        مسودة أولية — راجعها قبل الإطلاق الرسمي وعدّلها لتلائم عملك بدقة.
-      </div>
     </div>
   );
 }

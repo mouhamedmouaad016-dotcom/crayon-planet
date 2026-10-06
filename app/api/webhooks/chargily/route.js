@@ -2,10 +2,9 @@ import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { supabaseAdmin } from '../../../../lib/supabaseServer';
 import { verifySignature } from '../../../../lib/chargily';
-import {
-  sendPaymentSuccessEmail,
-  sendPaymentFailedEmail,
-} from '../../../../lib/email';
+import { sendPaymentFailedEmail } from '../../../../lib/email';
+import { makeDeliverer } from '../../../../lib/deliveryServer';
+import { checkAmount, isDuplicateEventError } from '../../../../lib/payment';
 
 export async function POST(req) {
   const secret = process.env.CHARGILY_SECRET_KEY;
@@ -76,11 +75,20 @@ export async function POST(req) {
     });
 
   if (duplicateError) {
-    console.log('Duplicate webhook ignored:', eventId);
+    if (isDuplicateEventError(duplicateError)) {
+      console.log('Duplicate webhook ignored:', eventId);
 
-    return NextResponse.json({
-      ok: true,
-      duplicate: true,
+      return NextResponse.json({
+        ok: true,
+        duplicate: true,
+      });
+    }
+
+    // خطأ قاعدة بيانات حقيقي وليس تكراراً: نسجّله بوضوح ونتابع المعالجة،
+    // فحماية عدم التكرار تبقى قائمة عبر فحص حالة الطلب أدناه.
+    console.error('webhook_events insert failed (NOT a duplicate):', {
+      code: duplicateError.code,
+      message: duplicateError.message,
     });
   }
 
@@ -138,7 +146,6 @@ export async function POST(req) {
   console.log('ORDER FOUND:', {
     orderId: order.id,
     status: order.status,
-    email: order.customer_email,
   });
 
   /*
@@ -159,6 +166,26 @@ export async function POST(req) {
    * Successful payment.
    */
   if (event.type === 'checkout.paid') {
+    const amountCheck = checkAmount(order, checkout);
+
+    if (!amountCheck.ok) {
+      console.error('PAYMENT HELD - amount/currency mismatch:', {
+        orderId,
+        reason: amountCheck.reason,
+        expected: amountCheck.expected ?? null,
+        paid: amountCheck.paid ?? null,
+      });
+
+      // العمود payment_flag يأتي من migration_004؛ غيابه لا يؤثر على الحجز.
+      await admin.from('orders').update({ payment_flag: amountCheck.reason }).eq('id', orderId);
+
+      return NextResponse.json({ ok: true, held: amountCheck.reason });
+    }
+
+    if (amountCheck.unverified) {
+      console.warn('Chargily event has no amount - proceeding (signature verified):', { orderId });
+    }
+
     const downloadToken = crypto.randomUUID();
 
     /*
@@ -188,135 +215,13 @@ export async function POST(req) {
     }
 
     /*
-     * Create temporary signed download URLs.
+     * Create signed download URLs for ALL ordered products, send the email,
+     * and set Delivered only if every link was created AND the email was sent.
+     * Otherwise the order stays Paid and can be re-sent (admin / customer recovery).
      */
-    const links = [];
-
-    for (const item of order.items || []) {
-      const {
-        data: product,
-        error: productError,
-      } = await admin
-        .from('products')
-        .select('file_path, name')
-        .eq('id', item.product_id)
-        .maybeSingle();
-
-      if (productError) {
-        console.error('Product lookup error:', {
-          productId: item.product_id,
-          message: productError.message,
-        });
-
-        continue;
-      }
-
-      if (!product?.file_path) {
-        console.error('Product has no file_path:', {
-          productId: item.product_id,
-          productName: product?.name || item.name,
-        });
-
-        continue;
-      }
-
-      const {
-        data: signed,
-        error: signedError,
-      } = await admin.storage
-        .from('product-files')
-        .createSignedUrl(
-          product.file_path,
-          60 * 60 * 48
-        );
-
-      if (signedError) {
-        console.error('Signed URL creation failed:', {
-          productId: item.product_id,
-          productName: product.name,
-          message: signedError.message,
-        });
-
-        continue;
-      }
-
-      if (!signed?.signedUrl) {
-        console.error('No signed URL returned:', {
-          productId: item.product_id,
-          productName: product.name,
-        });
-
-        continue;
-      }
-
-      links.push({
-        name: product.name,
-        url: signed.signedUrl,
-      });
-    }
-
-    console.log('DOWNLOAD LINKS RESULT:', {
-      orderId,
-      linksCount: links.length,
-    });
-
-    /*
-     * Send the product email.
-     */
-    let delivered = false;
-
-    if (links.length > 0) {
-      try {
-        const sent = await sendPaymentSuccessEmail(
-          order,
-          links
-        );
-
-        console.log('RESEND RESULT:', {
-          skipped: !!sent?.skipped,
-          hasError: !!sent?.error,
-          hasData: !!sent?.data,
-          errorMessage: sent?.error?.message || null,
-        });
-
-        delivered =
-          !sent?.skipped &&
-          !sent?.error;
-      } catch (emailError) {
-        console.error('Product email exception:', {
-          name: emailError?.name,
-          message: emailError?.message,
-        });
-
-        delivered = false;
-      }
-    } else {
-      console.error(
-        'NO DOWNLOAD LINKS CREATED - PRODUCT EMAIL NOT SENT'
-      );
-    }
-
-    /*
-     * Delivered only when the email was successfully sent.
-     */
-    const finalStatus = delivered
-      ? 'Delivered'
-      : 'Paid';
-
-    const { error: finalStatusError } = await admin
-      .from('orders')
-      .update({
-        status: finalStatus,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', orderId);
-
-    if (finalStatusError) {
-      console.error('Failed to update final order status:', {
-        message: finalStatusError.message,
-        code: finalStatusError.code,
-      });
-    }
+    const result = await makeDeliverer(admin)(order);
+    const delivered = result.complete;
+    const finalStatus = delivered ? 'Delivered' : 'Paid';
 
     /*
      * Update customer record.
