@@ -38,7 +38,7 @@ export async function POST(req) {
     { error: 'تعذر تحميل المنتجات حاليًا. حاول مرة أخرى لاحقًا.' },
     { status: 500 }
   );
-    }
+    }}
 
   try {
     event = JSON.parse(rawBody);
