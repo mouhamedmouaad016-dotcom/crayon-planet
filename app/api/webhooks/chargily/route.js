@@ -201,7 +201,16 @@ export async function POST(req) {
      * Mark the order as Paid first.
      */
     const { error: paidError } = await admin
-      if (paidError) {
+  .from('orders')
+  .update({
+    status: 'Paid',
+    payment_ref: checkout?.id || null,
+    download_token: downloadToken,
+    updated_at: new Date().toISOString(),
+  })
+  .eq('id', orderId);
+
+if (paidError) {
   console.error('Failed to update order to Paid:', {
     message: paidError.message,
     code: paidError.code,
@@ -220,26 +229,7 @@ export async function POST(req) {
     },
     { status: 500 }
   );
-      }
-      .update({
-        status: 'Paid',
-        payment_ref: checkout?.id || null,
-        download_token: downloadToken,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', orderId);
-
-    if (paidError) {
-      console.error('Failed to update order to Paid:', {
-        message: paidError.message,
-        code: paidError.code,
-      });
-
-      return NextResponse.json({
-        ok: true,
-        status: 'Paid',
-        warning: 'order_update_failed',
-      });
+}
     }
 
     /*
