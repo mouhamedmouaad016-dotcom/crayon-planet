@@ -201,7 +201,26 @@ export async function POST(req) {
      * Mark the order as Paid first.
      */
     const { error: paidError } = await admin
-      .from('orders')
+      if (paidError) {
+  console.error('Failed to update order to Paid:', {
+    message: paidError.message,
+    code: paidError.code,
+  });
+
+  // Remove the webhook event so a transient DB failure can be retried safely.
+  await admin
+    .from('webhook_events')
+    .delete()
+    .eq('id', eventId);
+
+  return NextResponse.json(
+    {
+      ok: false,
+      error: 'order_update_failed',
+    },
+    { status: 500 }
+  );
+      }
       .update({
         status: 'Paid',
         payment_ref: checkout?.id || null,
