@@ -90,7 +90,13 @@ export async function POST(req) {
       message: duplicateError.message,
     });
   }
-
+return NextResponse.json(
+  {
+    ok: false,
+    error: 'webhook_event_record_failed',
+  },
+  { status: 500 }
+);
   const checkout = event?.data;
 
   /*
