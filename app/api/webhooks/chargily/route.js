@@ -41,7 +41,7 @@ export async function POST(req) {
     }}
 
   try {
-    event = JSON.parse(rawBody);
+    const event = JSON.parse(rawBody);
   } catch (error) {
     console.error('Invalid webhook JSON:', error);
     return NextResponse.json(
