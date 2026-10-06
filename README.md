@@ -16,7 +16,7 @@ Environment Variables، وليس في الكود أبدًا.
 | `CHARGILY_SECRET_KEY` | لوحة Chargily → API Keys (Test ثم Live) | **سرّي — خادم فقط** |
 | `CHARGILY_MODE` | `test` أو `live` | غيّرها يدويًا عند الانتقال للإنتاج |
 | `RESEND_API_KEY` | حساب Resend → API Keys | **سرّي — خادم فقط** |
-| `RESEND_FROM_EMAIL` | بعد التحقق من نطاقك في Resend | مؤقتًا `onboarding@resend.dev` |
+| | `RESEND_FROM_EMAIL` | بريد المرسل بعد التحقق من نطاقك في Resend | `CRAYON PLANET <orders@crayonplanetdz.xyz>` |
 
 لا تُدخل أي مفتاح سرّي في هذه المحادثة أبدًا — ضعها مباشرة في Vercel.
 
