@@ -105,17 +105,21 @@ return NextResponse.json(
   const orderId = checkout?.metadata?.order_id;
 
   console.log('WEBHOOK ORDER:', {
- if (orderError || !order) {
-  console.error('Order creation error:', {
-    message: orderError?.message,
-    code: orderError?.code,
-  });
+  orderId: orderId || null,
+  eventType: event?.type || null,
+});
+
+if (!orderId) {
+  console.error('Webhook missing order_id');
 
   return NextResponse.json(
-    { error: 'تعذر إنشاء الطلب حاليًا. حاول مرة أخرى لاحقًا.' },
-    { status: 500 }
+    {
+      ok: false,
+      error: 'missing_order_id',
+    },
+    { status: 400 }
   );
-  }   
+}
 
   /*
    * Load the order.
