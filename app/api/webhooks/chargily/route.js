@@ -123,15 +123,24 @@ export async function POST(req) {
     .maybeSingle();
 
   if (orderError) {
-    console.error('Order lookup error:', {
-      message: orderError.message,
-      code: orderError.code,
-    });
+  console.error('Order lookup error:', {
+    message: orderError.message,
+    code: orderError.code,
+  });
 
-    return NextResponse.json({
-      ok: true,
-      ignored: 'order_lookup_error',
-    });
+  // Remove the webhook event so a transient DB failure can be retried safely.
+  await admin
+    .from('webhook_events')
+    .delete()
+    .eq('id', eventId);
+
+  return NextResponse.json(
+    {
+      ok: false,
+      error: 'order_lookup_failed',
+    },
+    { status: 500 }
+  );
   }
 
   if (!order) {
