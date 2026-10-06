@@ -48,7 +48,12 @@ export async function POST(req) {
       locale: 'ar',
       metadata: { order_id: order.id },
     });
+const verifiedCheckout = await client.getCheckout(checkout.id);
 
+console.log('CHARGILY CHECKOUT STATUS:', {
+  id: checkout.id,
+  status: verifiedCheckout?.status ?? 'unknown',
+});
     await admin.from('orders').update({ payment_ref: checkout.id }).eq('id', order.id);
 
     return NextResponse.json({ checkout_url: checkout.checkout_url });
