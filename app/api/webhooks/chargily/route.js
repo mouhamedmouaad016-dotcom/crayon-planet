@@ -28,18 +28,17 @@ export async function POST(req) {
       verifySignature(rawBody, signature, secret);
   } catch (error) {
     console.error('Webhook signature verification error:', error);
-    valid = false;
-  }
+    if (error) {
+  console.error('Products lookup error:', {
+    message: error.message,
+    code: error.code,
+  });
 
-  if (!valid) {
-    console.error('Invalid Chargily webhook signature');
-    return NextResponse.json(
-      { error: 'invalid_signature' },
-      { status: 403 }
-    );
-  }
-
-  let event;
+  return NextResponse.json(
+    { error: 'تعذر تحميل المنتجات حاليًا. حاول مرة أخرى لاحقًا.' },
+    { status: 500 }
+  );
+    }
 
   try {
     event = JSON.parse(rawBody);
@@ -100,18 +99,17 @@ export async function POST(req) {
   const orderId = checkout?.metadata?.order_id;
 
   console.log('WEBHOOK ORDER:', {
-    orderId: orderId || null,
-    eventType: event?.type || null,
+ if (orderError || !order) {
+  console.error('Order creation error:', {
+    message: orderError?.message,
+    code: orderError?.code,
   });
 
-  if (!orderId) {
-    console.error('No order_id found in Chargily metadata');
-
-    return NextResponse.json({
-      ok: true,
-      ignored: 'no_order_id',
-    });
-  }
+  return NextResponse.json(
+    { error: 'تعذر إنشاء الطلب حاليًا. حاول مرة أخرى لاحقًا.' },
+    { status: 500 }
+  );
+  }   
 
   /*
    * Load the order.
