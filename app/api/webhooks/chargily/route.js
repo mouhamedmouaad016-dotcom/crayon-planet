@@ -86,16 +86,18 @@ export async function POST(req) {
     // خطأ قاعدة بيانات حقيقي وليس تكراراً: نسجّله بوضوح ونتابع المعالجة،
     // فحماية عدم التكرار تبقى قائمة عبر فحص حالة الطلب أدناه.
     console.error('webhook_events insert failed (NOT a duplicate):', {
-      code: duplicateError.code,
-      message: duplicateError.message,
-    });
-  }
+  code: duplicateError.code,
+  message: duplicateError.message,
+});
+
 return NextResponse.json(
   {
     ok: false,
     error: 'webhook_event_record_failed',
   },
   { status: 500 }
+);
+  }
 );
   const checkout = event?.data;
 
