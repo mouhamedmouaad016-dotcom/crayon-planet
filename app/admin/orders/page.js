@@ -64,7 +64,11 @@ export default function AdminOrders() {
       {orders.map((o) => (
         <div key={o.id} className="flex flex-wrap items-center gap-2 py-3 border-b border-brand-line">
           <div className="flex-1 min-w-[200px]">
-            <b>{o.customer_email}</b>{o.customer_name ? ' • ' + o.customer_name : ''}
+            <div className="flex-1 min-w-[200px]">
+  <b>{o.customer_email}</b>
+  <div className="text-xs text-gray-400" dir="ltr">
+    Order ID: {o.id}
+  </div>
             <div className="text-sm text-gray-500">
               {(o.items || []).map((i) => i.name).join('، ')} • {fmt(o.total)}
             </div>
