@@ -32,6 +32,27 @@ export default function AdminOrders() {
     load();
   }
 
+  async function confirmPayment(o) {
+    const ref = window.prompt(
+      `تأكيد يدوي: تأكدت من Chargily أن هذا الطلب مدفوع (${fmt(o.total)}) وأن البريد ${o.customer_email} صحيح.\n` +
+      'أدخل رقم Checkout من Chargily (اختياري) ثم اضغط موافق للتأكيد والتسليم:',
+      ''
+    );
+    if (ref === null) return;
+    try {
+      const res = await fetch(`/api/admin/orders/${o.id}/confirm-payment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ checkout_id: ref }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) window.alert('تعذّر: ' + (j.error || res.status));
+      else if (j.complete) window.alert('تم تأكيد الدفع وإرسال المنتج إلى بريد العميل.');
+      else window.alert('تم تأكيد الدفع (Paid) لكن لم يكتمل الإرسال. استخدم "إعادة إرسال الرابط". ' + (j.error || ''));
+    } catch (_) { window.alert('تعذّر الاتصال.'); }
+    load();
+  }
+
   if (orders === null) return <p className="text-gray-400">جارٍ التحميل…</p>;
   if (!orders.length) return <Empty title="لا توجد طلبات" sub="ستظهر الطلبات هنا فور استلامها." />;
 
@@ -54,6 +75,9 @@ export default function AdminOrders() {
               <div className="text-sm text-red-600">دفعة محجوزة للمراجعة: {o.payment_flag}</div>
             )}
           </div>
+          {o.status === 'Pending' && (
+            <button className="btn btn-yellow" onClick={() => confirmPayment(o)}>Confirm Payment &amp; Deliver</button>
+          )}
           {['Paid', 'Delivered'].includes(o.status) && (
             <button className="btn btn-yellow" onClick={() => resend(o)}>إعادة إرسال الرابط</button>
           )}
@@ -68,4 +92,4 @@ export default function AdminOrders() {
       ))}
     </div>
   );
-}
+    }
