@@ -1,58 +1,175 @@
 'use client';
+
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Empty from '../../../components/Empty';
 
 const LABELS = {
-  Pending: ['جارٍ التحقق من الدفع…', 'لا تغلق الصفحة. نتحقق من نتيجة الدفع مباشرة من Chargily.'],
-  Paid: ['تم الدفع بنجاح 🎉', 'يصلك رابط تحميل المنتج على بريدك خلال لحظات. إن لم يصلك، افحص الرسائل غير الهامة ثم استعد الرابط من صفحة «استعادة الرابط».'],
-  Delivered: ['تم الدفع والتسليم 🎉', 'أرسلنا رابط تحميل المنتج إلى بريدك.'],
-  Failed: ['فشلت عملية الدفع', 'لم يُخصم أي مبلغ ولم يُرسل أي ملف. يمكنك المحاولة مجددًا من السلة.'],
-  Cancelled: ['تم إلغاء عملية الدفع', 'لم يُخصم أي مبلغ ولم يُرسل أي ملف.'],
+  Pending: {
+    title: 'جارٍ تأكيد الدفع…',
+    sub: 'تم استلام طلبك. نتحقق الآن من عملية الدفع لدى Chargily.',
+  },
+  Paid: {
+    title: 'تم الدفع بنجاح 🎉',
+    sub: 'منتجك جاهز للتحميل الآن.',
+  },
+  Delivered: {
+    title: 'تم الدفع بنجاح 🎉',
+    sub: 'منتجك جاهز للتحميل الآن.',
+  },
+  Failed: {
+    title: 'تعذر إتمام الدفع',
+    sub: 'لم تكتمل عملية الدفع. يمكنك المحاولة مرة أخرى.',
+  },
+  Cancelled: {
+    title: 'تم إلغاء الدفع',
+    sub: 'تم إلغاء عملية الدفع.',
+  },
 };
 
 export default function DoneInner() {
   const id = useSearchParams().get('order');
+
   const [status, setStatus] = useState('Pending');
+  const [downloads, setDownloads] = useState([]);
   const [tries, setTries] = useState(0);
 
   useEffect(() => {
     if (!id) return;
+
     let stop = false;
+
     const poll = async () => {
       try {
-        const res = await fetch(`/api/orders/${id}/status`, { cache: 'no-store' });
+        const res = await fetch(`/api/orders/${id}/status`, {
+          cache: 'no-store',
+        });
+
         if (res.ok) {
-          const { status: s } = await res.json();
-          if (!stop) setStatus(s);
-          if (['Paid', 'Delivered', 'Failed', 'Cancelled'].includes(s)) return;
+          const data = await res.json();
+
+          if (stop) return;
+
+          if (data?.status) {
+            setStatus(data.status);
+          }
+
+          if (Array.isArray(data?.downloads)) {
+            setDownloads(data.downloads);
+          }
+
+          if (
+            ['Paid', 'Delivered', 'Failed', 'Cancelled'].includes(
+              data?.status
+            )
+          ) {
+            return;
+          }
         }
       } catch (_) {}
-      if (!stop && tries < 20) {
+
+      if (!stop && tries < 40) {
         setTries((t) => t + 1);
-        setTimeout(poll, 3000);
       }
     };
+
     poll();
-    return () => { stop = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
 
-  if (!id) return <div className="py-6"><Empty title="لا يوجد طلب" sub="عد إلى المتجر وابدأ من هناك." /></div>;
+    return () => {
+      stop = true;
+    };
+  }, [id, tries]);
 
-  const [title, sub] = LABELS[status] || LABELS.Pending;
+  useEffect(() => {
+    if (!id) return;
+
+    if (
+      ['Paid', 'Delivered', 'Failed', 'Cancelled'].includes(status)
+    ) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setTries((t) => t + 1);
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, [id, status]);
+
+  if (!id) {
+    return (
+      <div className="py-6">
+        <Empty
+          title="لم يتم العثور على الطلب"
+          sub="يرجى العودة إلى المتجر والمحاولة مرة أخرى."
+        />
+      </div>
+    );
+  }
+
+  const label = LABELS[status] || LABELS.Pending;
 
   return (
     <div className="py-6">
-      <Empty title={title} sub={sub} />
-      <p className="text-center text-sm text-gray-500 mt-3">رقم الطلب: {id}</p>
-      <div className="text-center mt-4">
-        <Link href="/shop" className="btn btn-primary">العودة للمتجر</Link>
-        {(status === 'Paid' || status === 'Delivered') && (
-          <p className="mt-3 text-sm"><Link href="/recover" className="underline">لم يصلك الرابط؟ استعد رابط التحميل</Link></p>
+      <Empty title={label.title} sub={label.sub} />
+
+      <p className="text-center text-sm text-gray-500 mt-3">
+        رقم الطلب: {id}
+      </p>
+
+      {downloads.length > 0 && (
+        <div className="mt-6 max-w-md mx-auto">
+          <h2 className="text-center font-bold text-lg mb-4">
+            منتجاتك جاهزة للتحميل 📥
+          </h2>
+
+          <div className="space-y-3">
+            {downloads.map((item, index) => (
+              <a
+                key={`${item.product_id || item.name || 'product'}-${index}`}
+                href={item.url}
+                className="btn btn-primary w-full block text-center"
+                target="_blank"
+                rel="noreferrer"
+              >
+                تحميل: {item.name || 'المنتج'}
+              </a>
+            ))}
+          </div>
+
+          <p className="text-center text-xs text-gray-500 mt-4">
+            يمكنك أيضًا العثور على رابط التحميل في البريد الإلكتروني الذي أرسلناه لك.
+          </p>
+        </div>
+      )}
+
+      {status === 'Pending' && (
+        <p className="text-center text-sm text-gray-500 mt-5">
+          يرجى الانتظار قليلًا… جارٍ تأكيد الدفع.
+        </p>
+      )}
+
+      {['Paid', 'Delivered'].includes(status) &&
+        downloads.length === 0 && (
+          <p className="text-center text-sm text-gray-500 mt-5">
+            تم تأكيد الدفع، لكن جارٍ تجهيز رابط التحميل…
+          </p>
+        )}
+
+      <div className="text-center mt-6">
+        <Link href="/shop" className="btn btn-primary">
+          العودة للمتجر
+        </Link>
+
+        {['Paid', 'Delivered'].includes(status) && (
+          <p className="mt-3 text-sm">
+            <Link href="/recover" className="underline">
+              لم يصلك البريد؟ استرجع رابط التحميل
+            </Link>
+          </p>
         )}
       </div>
     </div>
   );
-}
+            }
