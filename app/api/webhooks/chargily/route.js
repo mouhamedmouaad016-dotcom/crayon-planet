@@ -8,49 +8,35 @@ import { checkAmount, isDuplicateEventError } from '../../../../lib/payment';
 
 export async function POST(req) {
   const secret = process.env.CHARGILY_SECRET_KEY;
-
   if (!secret) {
     console.error('CHARGILY_SECRET_KEY is missing');
-    return NextResponse.json(
-      { error: 'not_configured' },
-      { status: 503 }
-    );
+    return NextResponse.json({ error: 'not_configured' }, { status: 503 });
   }
 
   const rawBody = await req.text();
   const signature = req.headers.get('signature') || '';
 
   let valid = false;
-
   try {
-    valid =
-      !!signature &&
-      verifySignature(rawBody, signature, secret);
+    valid = !!signature && verifySignature(rawBody, signature, secret);
   } catch (error) {
-    console.error('Webhook signature verification error:', error);
-    if (error) {
-  console.error('Products lookup error:', {
-    message: error.message,
-    code: error.code,
-  });
-
-  return NextResponse.json(
-    { error: 'تعذر تحميل المنتجات حاليًا. حاول مرة أخرى لاحقًا.' },
-    { status: 500 }
-  );
-    }}
-
-  try {
-    const event = JSON.parse(rawBody);
-  } catch (error) {
-    console.error('Invalid webhook JSON:', error);
-    return NextResponse.json(
-      { error: 'invalid_json' },
-      { status: 400 }
-    );
+    console.error('Webhook signature verification error:', error?.message);
+    valid = false;
+  }
+  if (!valid) {
+    console.error('WEBHOOK REJECTED: invalid signature');
+    return NextResponse.json({ error: 'invalid_signature' }, { status: 401 });
   }
 
-  console.log('CHARGILY WEBHOOK EVENT:', {
+  let event;
+  try {
+    event = JSON.parse(rawBody);
+  } catch (error) {
+    console.error('Invalid webhook JSON:', error?.message);
+    return NextResponse.json({ error: 'invalid_json' }, { status: 400 });
+  }
+
+  console.log('WEBHOOK RECEIVED:', {
     type: event?.type,
     id: event?.id,
     checkoutId: event?.data?.id,
@@ -58,12 +44,9 @@ export async function POST(req) {
 
   const admin = supabaseAdmin();
 
-  /*
-   * Prevent duplicate webhook processing.
-   */
+  // Prevent duplicate webhook processing.
   const eventId =
-    event?.id ||
-    `${event?.data?.id || 'unknown'}:${event?.type || 'unknown'}`;
+    event?.id || `${event?.data?.id || 'unknown'}:${event?.type || 'unknown'}`;
 
   const { error: duplicateError } = await admin
     .from('webhook_events')
@@ -76,56 +59,30 @@ export async function POST(req) {
   if (duplicateError) {
     if (isDuplicateEventError(duplicateError)) {
       console.log('Duplicate webhook ignored:', eventId);
-
-      return NextResponse.json({
-        ok: true,
-        duplicate: true,
-      });
+      return NextResponse.json({ ok: true, duplicate: true });
     }
-
-    // خطأ قاعدة بيانات حقيقي وليس تكراراً: نسجّله بوضوح ونتابع المعالجة،
-    // فحماية عدم التكرار تبقى قائمة عبر فحص حالة الطلب أدناه.
     console.error('webhook_events insert failed (NOT a duplicate):', {
-  code: duplicateError.code,
-  message: duplicateError.message,
-});
-
-return NextResponse.json(
-  {
-    ok: false,
-    error: 'webhook_event_record_failed',
-  },
-  { status: 500 }
-);
+      code: duplicateError.code,
+      message: duplicateError.message,
+    });
+    // 500 so Chargily retries later.
+    return NextResponse.json(
+      { ok: false, error: 'webhook_event_record_failed' },
+      { status: 500 }
+    );
   }
 
   const checkout = event?.data;
-
-  /*
-   * The order ID is stored in Chargily metadata.
-   */
   const orderId = checkout?.metadata?.order_id;
 
-  console.log('WEBHOOK ORDER:', {
-  orderId: orderId || null,
-  eventType: event?.type || null,
-});
+  if (!orderId) {
+    console.error('Webhook missing order_id');
+    return NextResponse.json(
+      { ok: false, error: 'missing_order_id' },
+      { status: 400 }
+    );
+  }
 
-if (!orderId) {
-  console.error('Webhook missing order_id');
-
-  return NextResponse.json(
-    {
-      ok: false,
-      error: 'missing_order_id',
-    },
-    { status: 400 }
-  );
-}
-
-  /*
-   * Load the order.
-   */
   const { data: order, error: orderError } = await admin
     .from('orders')
     .select('*')
@@ -133,57 +90,29 @@ if (!orderId) {
     .maybeSingle();
 
   if (orderError) {
-  console.error('Order lookup error:', {
-    message: orderError.message,
-    code: orderError.code,
-  });
-
-  // Remove the webhook event so a transient DB failure can be retried safely.
-  await admin
-    .from('webhook_events')
-    .delete()
-    .eq('id', eventId);
-
-  return NextResponse.json(
-    {
-      ok: false,
-      error: 'order_lookup_failed',
-    },
-    { status: 500 }
-  );
+    console.error('Order lookup error:', {
+      message: orderError.message,
+      code: orderError.code,
+    });
+    await admin.from('webhook_events').delete().eq('id', eventId);
+    return NextResponse.json(
+      { ok: false, error: 'order_lookup_failed' },
+      { status: 500 }
+    );
   }
 
   if (!order) {
     console.error('Order not found:', orderId);
-
-    return NextResponse.json({
-      ok: true,
-      ignored: 'order_not_found',
-    });
+    return NextResponse.json({ ok: true, ignored: 'order_not_found' });
   }
 
-  console.log('ORDER FOUND:', {
-    orderId: order.id,
-    status: order.status,
-  });
+  console.log('ORDER FOUND:', { orderId: order.id, status: order.status });
 
-  /*
-   * Do not process an already completed/failed/cancelled order again.
-   */
-  if (
-    ['Paid', 'Delivered', 'Failed', 'Cancelled'].includes(
-      order.status
-    )
-  ) {
-    return NextResponse.json({
-      ok: true,
-      already: order.status,
-    });
+  if (['Paid', 'Delivered', 'Failed', 'Cancelled'].includes(order.status)) {
+    return NextResponse.json({ ok: true, already: order.status });
   }
 
-  /*
-   * Successful payment.
-   */
+  // ---- Successful payment ----
   if (event.type === 'checkout.paid') {
     const amountCheck = checkAmount(order, checkout);
 
@@ -194,10 +123,10 @@ if (!orderId) {
         expected: amountCheck.expected ?? null,
         paid: amountCheck.paid ?? null,
       });
-
-      // العمود payment_flag يأتي من migration_004؛ غيابه لا يؤثر على الحجز.
-      await admin.from('orders').update({ payment_flag: amountCheck.reason }).eq('id', orderId);
-
+      await admin
+        .from('orders')
+        .update({ payment_flag: amountCheck.reason })
+        .eq('id', orderId);
       return NextResponse.json({ ok: true, held: amountCheck.reason });
     }
 
@@ -207,65 +136,73 @@ if (!orderId) {
 
     const downloadToken = crypto.randomUUID();
 
-    /*
-     * Mark the order as Paid first.
-     */
-    const { error: paidError } = await admin
-  .from('orders')
-  .update({
-    status: 'Paid',
-    payment_ref: checkout?.id || null,
-    download_token: downloadToken,
-    updated_at: new Date().toISOString(),
-  })
-  .eq('id', orderId);
+    // Mark Paid first, atomically (only if still Pending).
+    const { data: updatedRows, error: paidError } = await admin
+      .from('orders')
+      .update({
+        status: 'Paid',
+        payment_ref: checkout?.id || null,
+        download_token: downloadToken,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', orderId)
+      .eq('status', 'Pending')
+      .select('id');
 
-if (paidError) {
-  console.error('Failed to update order to Paid:', {
-    message: paidError.message,
-    code: paidError.code,
-  });
+    if (paidError) {
+      console.error('Failed to update order to Paid:', {
+        message: paidError.message,
+        code: paidError.code,
+      });
+      await admin.from('webhook_events').delete().eq('id', eventId);
+      return NextResponse.json(
+        { ok: false, error: 'order_update_failed' },
+        { status: 500 }
+      );
+    }
 
-  // Remove the webhook event so a transient DB failure can be retried safely.
-  await admin
-    .from('webhook_events')
-    .delete()
-    .eq('id', eventId);
+    if (!updatedRows || updatedRows.length === 0) {
+      console.log('Order no longer Pending, skipping:', orderId);
+      return NextResponse.json({ ok: true, already: 'processed' });
+    }
 
-  return NextResponse.json(
-    {
-      ok: false,
-      error: 'order_update_failed',
-    },
-    { status: 500 }
-  );
-}
-    
+    console.log('WEBHOOK PAYMENT PROCESSED:', { orderId });
 
-    /*
-     * Create signed download URLs for ALL ordered products, send the email,
-     * and set Delivered only if every link was created AND the email was sent.
-     * Otherwise the order stays Paid and can be re-sent (admin / customer recovery).
-     */
-    const result = await makeDeliverer(admin)(order);
-    const delivered = result.complete;
-    const finalStatus = delivered ? 'Delivered' : 'Paid';
+    // Delivery: failure must leave the order Paid, never Pending.
+    let delivered = false;
+    try {
+      const freshOrder = {
+        ...order,
+        status: 'Paid',
+        payment_ref: checkout?.id || null,
+        download_token: downloadToken,
+      };
+      const result = await makeDeliverer(admin)(freshOrder);
+      delivered = !!result?.complete;
+    } catch (error) {
+      console.error('DELIVERY FAILED:', { orderId, message: error?.message });
+    }
 
-    /*
-     * Update customer record.
-     */
+    if (delivered) {
+      const { error: deliveredError } = await admin
+        .from('orders')
+        .update({ status: 'Delivered', updated_at: new Date().toISOString() })
+        .eq('id', orderId)
+        .eq('status', 'Paid');
+      if (deliveredError) {
+        console.error('Failed to set Delivered:', { message: deliveredError.message });
+      }
+      console.log('DELIVERY SUCCESS:', { orderId });
+    } else {
+      console.error('DELIVERY FAILED: order stays Paid for resend', { orderId });
+    }
+
     const { error: customerError } = await admin
       .from('customers')
       .upsert(
-        {
-          email: order.customer_email,
-          name: order.customer_name,
-        },
-        {
-          onConflict: 'email',
-        }
+        { email: order.customer_email, name: order.customer_name },
+        { onConflict: 'email' }
       );
-
     if (customerError) {
       console.error('Customer update error:', {
         message: customerError.message,
@@ -273,21 +210,13 @@ if (paidError) {
       });
     }
 
-    console.log('PAYMENT PROCESSING FINISHED:', {
-      orderId,
-      status: finalStatus,
-      emailSent: delivered,
-    });
-
     return NextResponse.json({
       ok: true,
-      status: finalStatus,
+      status: delivered ? 'Delivered' : 'Paid',
     });
   }
 
-  /*
-   * Failed payment.
-   */
+  // ---- Failed payment ----
   if (event.type === 'checkout.failed') {
     await admin
       .from('orders')
@@ -301,24 +230,13 @@ if (paidError) {
     try {
       await sendPaymentFailedEmail(order);
     } catch (error) {
-      console.error('Failed payment email error:', {
-        message: error?.message,
-      });
+      console.error('Failed payment email error:', { message: error?.message });
     }
-
-    return NextResponse.json({
-      ok: true,
-      status: 'Failed',
-    });
+    return NextResponse.json({ ok: true, status: 'Failed' });
   }
 
-  /*
-   * Cancelled or expired payment.
-   */
-  if (
-    event.type === 'checkout.canceled' ||
-    event.type === 'checkout.expired'
-  ) {
+  // ---- Cancelled / expired ----
+  if (event.type === 'checkout.canceled' || event.type === 'checkout.expired') {
     await admin
       .from('orders')
       .update({
@@ -327,17 +245,9 @@ if (paidError) {
         updated_at: new Date().toISOString(),
       })
       .eq('id', orderId);
-
-    return NextResponse.json({
-      ok: true,
-      status: 'Cancelled',
-    });
+    return NextResponse.json({ ok: true, status: 'Cancelled' });
   }
 
   console.log('Unhandled Chargily event:', event.type);
-
-  return NextResponse.json({
-    ok: true,
-    ignored: event.type,
-  });
-    }
+  return NextResponse.json({ ok: true, ignored: event.type });
+        }
