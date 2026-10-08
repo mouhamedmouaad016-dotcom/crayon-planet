@@ -5,7 +5,7 @@ import { UUID_RE } from '../../../../lib/validate';
 export const dynamic = 'force-dynamic';
 
 const WINDOW_MS = 48 * 60 * 60 * 1000; // صلاحية الرابط: 48 ساعة من آخر تسليم
-const REDIRECT_SECONDS = 60; // عمر رابط Supabase بعد النقر
+const REDIRECT_SECONDS = 60 * 60; // مدة الرابط ساعة واحدة
 
 function notFound() {
   return new NextResponse('الرابط غير صالح أو منتهي الصلاحية.', {
