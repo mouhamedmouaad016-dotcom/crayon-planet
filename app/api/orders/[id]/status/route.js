@@ -1,20 +1,47 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '../../../../../lib/supabaseServer';
+import { supabaseAdmin } from '../../../../../../lib/supabaseServer';
 
-// Public, read-only, and deliberately narrow: returns ONLY the order's
-// status by its (unguessable) UUID — never the customer's email, items or
-// total. This lets the "thank you" page poll for the real Chargily-verified
-// status without weakening orders' row-level security (orders stay
-// admin-only to select from the browser).
+export const dynamic = 'force-dynamic';
+
 export async function GET(_req, { params }) {
-  const { data, error } = await supabaseAdmin()
+  const admin = supabaseAdmin();
+
+  const { data: order, error } = await admin
     .from('orders')
-    .select('status')
+    .select('id,status,download_token,items')
     .eq('id', params.id)
     .maybeSingle();
 
-  if (error || !data) {
-    return NextResponse.json({ error: 'not_found' }, { status: 404 });
+  if (error || !order) {
+    return NextResponse.json(
+      { error: 'not_found' },
+      { status: 404 }
+    );
   }
-  return NextResponse.json({ status: data.status });
+
+  // لا نكشف روابط التحميل قبل تأكيد الدفع
+  if (!['Paid', 'Delivered'].includes(order.status)) {
+    return NextResponse.json({
+      status: order.status,
+      downloads: [],
+    });
+  }
+
+  const downloads = [];
+
+  for (const item of Array.isArray(order.items) ? order.items : []) {
+    if (!item?.product_id || !order.download_token) continue;
+
+    downloads.push({
+      name: item.name || 'المنتج',
+      url:
+        `/download/${encodeURIComponent(order.download_token)}` +
+        `/${encodeURIComponent(item.product_id)}`,
+    });
+  }
+
+  return NextResponse.json({
+    status: order.status,
+    downloads,
+  });
 }
