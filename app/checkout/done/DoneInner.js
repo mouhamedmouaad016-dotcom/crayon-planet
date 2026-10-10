@@ -12,7 +12,7 @@ const LABELS = {
   },
   Paid: {
     title: 'تم الدفع بنجاح 🎉',
-   sub: 'شكرًا لشرائك من CRAYON PLANET. إذا ظهرت أزرار التحميل أسفل الصفحة، اضغط على الزر الخاص بمنتجك لتنزيله.',
+    sub: 'شكرًا لشرائك من CRAYON PLANET. اضغط على زر التحميل لتنزيل منتجك.',
   },
   Delivered: {
     title: 'تم الدفع بنجاح 🎉',
@@ -35,6 +35,11 @@ export default function DoneInner() {
   const [downloads, setDownloads] = useState([]);
   const [tries, setTries] = useState(0);
 
+  const [message, setMessage] = useState('');
+  const [email, setEmail] = useState('');
+  const [sending, setSending] = useState(false);
+  const [inquiryResult, setInquiryResult] = useState('');
+
   useEffect(() => {
     if (!id) return;
 
@@ -51,9 +56,7 @@ export default function DoneInner() {
 
           if (stop) return;
 
-          if (data?.status) {
-            setStatus(data.status);
-          }
+          if (data?.status) setStatus(data.status);
 
           if (Array.isArray(data?.downloads)) {
             setDownloads(data.downloads);
@@ -97,6 +100,41 @@ export default function DoneInner() {
     return () => clearTimeout(timer);
   }, [id, status]);
 
+  async function submitInquiry(e) {
+    e.preventDefault();
+    setSending(true);
+    setInquiryResult('');
+
+    try {
+      const res = await fetch('/api/inquiries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message,
+          email,
+          orderId: id,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setInquiryResult(
+          data?.error || 'تعذر إرسال استفسارك. يرجى المحاولة مجددًا.'
+        );
+        return;
+      }
+
+      setInquiryResult('تم إرسال استفسارك بنجاح. شكرًا لتواصلك معنا.');
+      setMessage('');
+      setEmail('');
+    } catch (_) {
+      setInquiryResult('تعذر الاتصال. تحققي من الإنترنت وحاولي مجددًا.');
+    } finally {
+      setSending(false);
+    }
+  }
+
   if (!id) {
     return (
       <div className="py-6">
@@ -109,6 +147,7 @@ export default function DoneInner() {
   }
 
   const label = LABELS[status] || LABELS.Pending;
+  const isPaid = ['Paid', 'Delivered'].includes(status);
 
   return (
     <div className="py-6">
@@ -119,7 +158,7 @@ export default function DoneInner() {
       </p>
 
       {downloads.length > 0 && (
-        <div className="mt-6 max-w-md mx-auto">
+        <div className="mt-6 max-w-md mx-auto px-4">
           <h2 className="text-center font-bold text-lg mb-4">
             منتجاتك جاهزة للتحميل 📥
           </h2>
@@ -139,9 +178,8 @@ export default function DoneInner() {
           </div>
 
           <p className="text-center text-xs text-gray-500 mt-4">
-            يمكنك تحميل منتجك من الأزرار أعلاه. وقد يصلك رابط التحميل أيضًا عبر البريد الإلكتروني.
-            إذا لم تجد الرسالة في صندوق الوارد، فتحقّق من مجلد Spam
-            (الرسائل غير المرغوب فيها) في Gmail.
+            يمكنك تحميل منتجك من الأزرار أعلاه، كما يصلك رابط التحميل عبر البريد الإلكتروني.
+            إذا لم تجد الرسالة، فتحقّق من مجلد الرسائل غير المرغوب فيها (Spam).
           </p>
         </div>
       )}
@@ -152,21 +190,18 @@ export default function DoneInner() {
         </p>
       )}
 
-      {['Paid', 'Delivered'].includes(status) &&
-        downloads.length === 0 && (
-          <p className="text-center text-sm text-gray-500 mt-5">
-            تم تأكيد الدفع، لكن جارٍ تجهيز رابط التحميل…
-            إذا وصلتك رسالة بريد إلكتروني، فتحقّق من مجلد Spam
-            (الرسائل غير المرغوب فيها) في Gmail عند عدم ظهورها في صندوق الوارد.
-          </p>
-        )}
+      {isPaid && downloads.length === 0 && (
+        <p className="text-center text-sm text-gray-500 mt-5 px-4">
+          تم تأكيد الدفع، لكن جارٍ تجهيز رابط التحميل. يرجى الانتظار قليلًا.
+        </p>
+      )}
 
       <div className="text-center mt-6">
         <Link href="/shop" className="btn btn-primary">
           العودة للمتجر
         </Link>
 
-        {['Paid', 'Delivered'].includes(status) && (
+        {isPaid && (
           <p className="mt-3 text-sm">
             <Link href="/recover" className="underline">
               لم يصلك البريد؟ استرجع رابط التحميل
@@ -174,7 +209,78 @@ export default function DoneInner() {
           </p>
         )}
       </div>
+
+      {isPaid && (
+        <section className="max-w-md mx-auto mt-10 px-4">
+          <div className="rounded-2xl border border-yellow-300 bg-blue-50 p-5">
+            <h2 className="text-center text-lg font-bold mb-2">
+              هل لديك استفسار؟ 💬
+            </h2>
+
+            <p className="text-center text-sm text-gray-600 mb-5">
+              أرسلي رسالتك وسنطلع عليها من خلال لوحة إدارة المتجر.
+            </p>
+
+            <form onSubmit={submitInquiry} className="space-y-4">
+              <div>
+                <label
+                  htmlFor="inquiry-message"
+                  className="block text-sm font-medium mb-2"
+                >
+                  رسالتك أو استفسارك *
+                </label>
+                <textarea
+                  id="inquiry-message"
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  required
+                  minLength={3}
+                  maxLength={2000}
+                  rows={4}
+                  placeholder="اكتبي استفسارك هنا..."
+                  className="w-full rounded-xl border border-gray-300 bg-white p-3"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="inquiry-email"
+                  className="block text-sm font-medium mb-2"
+                >
+                  بريدك الإلكتروني (اختياري)
+                </label>
+                <input
+                  id="inquiry-email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  maxLength={254}
+                  placeholder="example@email.com"
+                  className="w-full rounded-xl border border-gray-300 bg-white p-3"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={sending}
+                className="btn btn-primary w-full disabled:opacity-60"
+              >
+                {sending ? 'جارٍ إرسال الاستفسار…' : 'إرسال الاستفسار'}
+              </button>
+
+              {inquiryResult && (
+                <p
+                  role="status"
+                  className="text-center text-sm mt-3"
+                  aria-live="polite"
+                >
+                  {inquiryResult}
+                </p>
+              )}
+            </form>
+          </div>
+        </section>
+      )}
     </div>
   );
-              }
-        
+               }
