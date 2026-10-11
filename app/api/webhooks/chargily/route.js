@@ -183,19 +183,70 @@ export async function POST(req) {
       console.error('DELIVERY FAILED:', { orderId, message: error?.message });
     }
 
-    if (delivered) {
-      const { error: deliveredError } = await admin
-        .from('orders')
-        .update({ status: 'Delivered', updated_at: new Date().toISOString() })
-        .eq('id', orderId)
-        .eq('status', 'Paid');
-      if (deliveredError) {
-        console.error('Failed to set Delivered:', { message: deliveredError.message });
-      }
-      console.log('DELIVERY SUCCESS:', { orderId });
+    
+  if (delivered) {
+    const { data: deliveredRows, error: deliveredError } = await admin
+      .from('orders')
+      .update({
+        status: 'Delivered',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', orderId)
+      .eq('status', 'Paid')
+      .select('id');
+
+    if (deliveredError || !deliveredRows || deliveredRows.length === 0) {
+      delivered = false;
+      console.error('Failed to confirm Delivered:', {
+        orderId,
+        message: deliveredError?.message || 'Order status was not updated',
+      });
     } else {
-      console.error('DELIVERY FAILED: order stays Paid for resend', { orderId });
+      const deliveredAt = Date.now();
+
+      const followups = [
+        {
+          order_id: orderId,
+          customer_email: order.customer_email,
+          sequence_step: 1,
+          scheduled_at: new Date(
+            deliveredAt + 24 * 60 * 60 * 1000
+          ).toISOString(),
+          status: 'pending',
+        },
+        {
+          order_id: orderId,
+          customer_email: order.customer_email,
+          sequence_step: 2,
+          scheduled_at: new Date(
+            deliveredAt + 3 * 24 * 60 * 60 * 1000
+          ).toISOString(),
+          status: 'pending',
+        },
+      ];
+
+      const { error: followupError } = await admin
+        .from('followup_emails')
+        .upsert(followups, {
+          onConflict: 'order_id,sequence_step',
+          ignoreDuplicates: true,
+        });
+
+      if (followupError) {
+        console.error('Follow-up scheduling failed:', {
+          orderId,
+          message: followupError.message,
+        });
+      } else {
+        console.log('FOLLOW-UPS SCHEDULED:', { orderId });
+      }
+
+      console.log('DELIVERY SUCCESS:', { orderId });
     }
+  } else {
+    console.error('DELIVERY FAILED: order stays Paid for resend', { orderId });
+          }
+    
 
     const { error: customerError } = await admin
       .from('customers')
