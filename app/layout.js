@@ -4,6 +4,7 @@ import Footer from '../components/Footer';
 import { CartProvider } from '../lib/cart';
 import { supabaseServer } from '../lib/supabaseServer';
 import Script from 'next/script';
+import { Analytics } from '@vercel/analytics/next';
 
 const SITE = (process.env.NEXT_PUBLIC_SITE_URL || 'https://crayonplanetdz.com').replace(/\/$/, '');
 
@@ -88,6 +89,7 @@ export default async function RootLayout({ children }) {
           <main className="max-w-5xl mx-auto px-4">{children}</main>
           <Footer settings={settings} />
         </CartProvider>
+        <Analytics />
       </body>
     </html>
   );
